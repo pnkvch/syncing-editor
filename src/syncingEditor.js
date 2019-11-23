@@ -6,28 +6,31 @@ import io from "socket.io-client";
 
 const socket = io("http://localhost:4000/");
 
-const SyncingEditor = () => {
+const SyncingEditor = ({ groupId }) => {
   const [value, setValue] = useState(initialValue);
   const editor = useRef(null);
-  const remote = useRef(false);
   const id = useRef(`${Date.now()}`);
 
   useEffect(() => {
-    socket.once("init-value", value => {
-      setValue(Value.fromJSON(value));
+    fetch(`http://localhost:4000/groups/${groupId}`).then(x => {
+      x.json().then(data => {
+        setValue(Value.fromJSON(data));
+      });
     });
 
-    socket.emit("send-value");
+    const eventName = `new-remote-operation-${groupId}`;
 
-    socket.on("new-remote-operation", ({ editorId, operations }) => {
+    socket.on(eventName, ({ editorId, operations }) => {
       if (id.current !== editorId) {
         operations.forEach(o => {
-          remote.current = true;
           editor.current.applyOperation(o);
-          remote.current = false;
         });
       }
     });
+
+    return () => {
+      socket.off(eventName);
+    };
   }, []);
 
   const onChange = ({ value, operations }) => {
@@ -45,7 +48,8 @@ const SyncingEditor = () => {
       socket.emit("new-operation", {
         editorId: id.current,
         operations: ops,
-        value: value
+        value: value,
+        groupId
       });
     }
   };
